@@ -9,9 +9,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout source code
       - name: Checkout code
         uses: actions/checkout@v3
-
+ 
+      # Step 2: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -19,19 +21,27 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1   # <-- replace if using another region
 
+
+      # # Step 3: Debug AWS environment (optional, helps if things fail)
+      - name: Debug AWS Env
+        run: env | grep AWS || true
+
+      # Step 4: Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
              region:us-east-1
 
+       # Step 5: Build, tag, and push Docker image to ECR
       - name: Build, tag, and push image
         run: |
           IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/my-app:${{ github.sha }}
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-
+       
+      # Step 6: Update Helm values in GitOps repo
       - name: Update Helm values in GitOps repo
         run: |
           git clone git@github.com:waj310/my-gitops-repo.git
