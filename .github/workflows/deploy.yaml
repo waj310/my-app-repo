@@ -1,0 +1,43 @@
+name: CI/CD to EKS with ArgoCD
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1   # <-- replace if using another region
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        run: |
+          IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/my-app:${{ github.sha }}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+      - name: Update Helm values in GitOps repo
+        run: |
+          git clone git@github.com:waj310/my-gitops-repo.git
+          cd my-gitops-repo/my-app
+          yq -i ".image.repository = \"${{ steps.login-ecr.outputs.registry }}/my-app\"" values.yaml
+          yq -i ".image.tag = \"${{ github.sha }}\"" values.yaml
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git commit -am "Update image to $IMAGE_URI"
+          git push
+
